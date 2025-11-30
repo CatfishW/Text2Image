@@ -63,19 +63,32 @@ export async function checkHealth(): Promise<boolean> {
     clearTimeout(timeoutId)
     
     if (!response.ok) {
+      console.warn(`Health check failed with status ${response.status}`)
       return false
     }
     
     // Parse the response to check the actual status
     const data = await response.json()
     
-    // Only consider healthy if:
-    // 1. Overall status is "healthy"
-    // 2. Text2Image server has model loaded and CUDA available
+    // Consider healthy if:
+    // 1. Overall status is "healthy", OR
+    // 2. Gateway is running AND text2image server status is "healthy", OR
+    // 3. Gateway is running AND model is loaded and CUDA is available
     const isHealthy = 
-      data.status === "healthy" &&
-      data.text2image_server?.model_loaded === true &&
-      data.text2image_server?.cuda_available === true
+      data.status === "healthy" ||
+      (data.gateway === "running" && 
+       (data.text2image_server?.status === "healthy" ||
+        (data.text2image_server?.model_loaded === true && 
+         data.text2image_server?.cuda_available === true)))
+    
+    // Log for debugging
+    if (!isHealthy) {
+      console.warn("Health check: API not healthy", {
+        status: data.status,
+        gateway: data.gateway,
+        text2image_server: data.text2image_server,
+      })
+    }
     
     return isHealthy
   } catch (error) {

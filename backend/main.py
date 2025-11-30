@@ -162,17 +162,23 @@ async def health():
         response = await http_client.get("/health", timeout=5.0)
         if response.status_code == 200:
             server_health = response.json()
+            server_status = server_health.get("status", "unknown")
             model_loaded = server_health.get("model_loaded", False)
             cuda_available = server_health.get("cuda_available", False)
             
-            # Only consider healthy if model is loaded and CUDA is available
-            is_healthy = model_loaded and cuda_available
+            # Consider healthy if:
+            # 1. Server status is "healthy" (primary check), OR
+            # 2. Model is loaded and CUDA is available (detailed check)
+            is_healthy = (
+                server_status == "healthy" or 
+                (model_loaded and cuda_available)
+            )
             
             return {
                 "status": "healthy" if is_healthy else "degraded",
                 "gateway": "running",
                 "text2image_server": {
-                    "status": server_health.get("status", "unknown"),
+                    "status": server_status,
                     "model_loaded": model_loaded,
                     "cuda_available": cuda_available,
                     "current_queue_size": server_health.get("current_queue_size", 0),
@@ -190,12 +196,34 @@ async def health():
                     "cuda_available": False,
                 },
             }
-    except Exception as e:
+    except httpx.ConnectError as e:
         return {
             "status": "degraded",
             "gateway": "running",
             "text2image_server": {
                 "status": "unreachable",
+                "model_loaded": False,
+                "cuda_available": False,
+                "error": f"Cannot connect to {TEXT2IMAGE_SERVER_URL}: {str(e)}",
+            },
+        }
+    except httpx.TimeoutException:
+        return {
+            "status": "degraded",
+            "gateway": "running",
+            "text2image_server": {
+                "status": "timeout",
+                "model_loaded": False,
+                "cuda_available": False,
+                "error": "Health check timed out",
+            },
+        }
+    except Exception as e:
+        return {
+            "status": "degraded",
+            "gateway": "running",
+            "text2image_server": {
+                "status": "error",
                 "model_loaded": False,
                 "cuda_available": False,
                 "error": str(e),
