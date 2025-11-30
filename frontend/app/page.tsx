@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
-import { generateImage, generateImageStream, checkHealth, type ProgressUpdate } from "@/lib/api"
+import { generateImage, generateImageStream, checkHealth, type ProgressUpdate, type GenerateResponse } from "@/lib/api"
 import { RESOLUTION_PRESETS, type GeneratedImage } from "@/types"
 import { toast } from "sonner"
 import {
