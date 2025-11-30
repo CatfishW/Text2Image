@@ -268,16 +268,16 @@ export default function Home() {
               className="w-80 glass-panel h-full overflow-y-auto hidden md:block"
             >
               <div className="p-6 space-y-8">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold flex items-center gap-2">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-bold flex items-center gap-2 text-gradient-gold">
                     <Settings2 className="w-5 h-5 text-primary" />
-                    Configuration
+                    CONFIGURATION
                   </h2>
                 </div>
 
                 {/* Dimensions */}
                 <div className="space-y-4">
-                  <Label className="text-sm font-medium text-muted-foreground">Dimensions</Label>
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/80">Dimensions</Label>
                   <div className="grid grid-cols-3 gap-2">
                     {RESOLUTION_PRESETS.map((preset) => (
                       <button
@@ -336,10 +336,10 @@ export default function Home() {
                 </div>
 
                 {/* Steps */}
-                <div className="space-y-4">
+                <div className="space-y-4 pt-4 border-t border-border/40">
                   <div className="flex justify-between">
-                    <Label className="text-sm font-medium text-muted-foreground">Quality Steps</Label>
-                    <span className="text-xs font-mono bg-muted px-2 py-0.5 rounded">{steps}</span>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/80">Quality Steps</Label>
+                    <span className="text-xs font-mono bg-primary/10 text-primary px-2 py-0.5 rounded border border-primary/20">{steps}</span>
                   </div>
                   <Slider
                     value={[steps]}
@@ -352,9 +352,9 @@ export default function Home() {
                 </div>
 
                 {/* Seed */}
-                <div className="space-y-4">
+                <div className="space-y-4 pt-4 border-t border-border/40">
                   <div className="flex justify-between items-center">
-                    <Label className="text-sm font-medium text-muted-foreground">Seed</Label>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/80">Seed</Label>
                     <Button
                       variant="ghost"
                       size="icon"
@@ -377,8 +377,8 @@ export default function Home() {
                 </div>
 
                 {/* Negative Prompt */}
-                <div className="space-y-4">
-                  <Label className="text-sm font-medium text-muted-foreground">Negative Prompt</Label>
+                <div className="space-y-4 pt-4 border-t border-border/40">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/80">Negative Prompt</Label>
                   <Textarea
                     value={negativePrompt}
                     onChange={(e) => setNegativePrompt(e.target.value)}
@@ -386,6 +386,28 @@ export default function Home() {
                     className="min-h-[80px] bg-muted/50 border-transparent resize-none text-sm"
                     maxLength={2000}
                   />
+                </div>
+
+                {/* Example Prompts */}
+                <div className="space-y-4 pt-4 border-t border-border/40">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground/80">Example Prompts</Label>
+                  <div className="grid gap-2">
+                    {[
+                      "A futuristic city with flying cars at sunset, cyberpunk style",
+                      "A cute robot gardening in a greenhouse, detailed, 8k",
+                      "Portrait of a wizard with a glowing staff, fantasy art",
+                      "A serene lake reflection with mountains, photorealistic"
+                    ].map((example, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setPrompt(example)}
+                        className="text-xs text-left p-2 rounded bg-muted/30 hover:bg-muted/50 transition-colors border border-transparent hover:border-primary/20 truncate"
+                        title={example}
+                      >
+                        {example}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </motion.aside>
@@ -456,9 +478,9 @@ export default function Home() {
                   <div className="w-24 h-24 rounded-3xl bg-muted/30 mx-auto flex items-center justify-center animate-float-slow">
                     <ImageIcon className="w-10 h-10 text-muted-foreground/50" />
                   </div>
-                  <div className="space-y-2">
-                    <h3 className="text-2xl font-bold text-gradient-brown">Ready to Create</h3>
-                    <p className="text-muted-foreground">
+                  <div className="space-y-3">
+                    <h3 className="text-3xl font-bold text-gradient-gold tracking-tight">Ready to Create</h3>
+                    <p className="text-muted-foreground max-w-xs mx-auto leading-relaxed">
                       Enter a prompt below to generate stunning AI art using our advanced models.
                     </p>
                   </div>
@@ -468,9 +490,9 @@ export default function Home() {
           </div>
 
           {/* Bottom Floating Bar */}
-          <div className="w-full max-w-3xl mx-auto p-4 pb-8 relative z-20">
+          <div className="w-full max-w-3xl mx-auto p-6 pb-10 relative z-20">
             <motion.div
-              className="glass rounded-2xl p-2 shadow-2xl ring-1 ring-white/20"
+              className="glass-card rounded-2xl p-1.5 shadow-2xl ring-1 ring-white/10 bg-background/40 backdrop-blur-xl"
               initial={{ y: 50, opacity: 0 }}
               animate={{ y: 0, opacity: 1 }}
               transition={{ delay: 0.2 }}

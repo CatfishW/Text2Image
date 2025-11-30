@@ -101,6 +101,9 @@ export function Navbar({ activeTab, onTabChange, apiHealth }: NavbarProps) {
                 <span className="text-[10px] sm:text-xs text-muted-foreground font-medium">
                   AI Image Generation Studio
                 </span>
+                <span className="text-[9px] sm:text-[10px] text-muted-foreground/60">
+                  Creator: Yanlai Wu (wuyanl37@rowan.edu)
+                </span>
               </div>
             </motion.div>
 
