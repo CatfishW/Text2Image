@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label"
 import { Slider } from "@/components/ui/slider"
 import { Textarea } from "@/components/ui/textarea"
 import { Navbar } from "@/components/navbar"
+import { PrinterAnimation } from "@/components/printer-animation"
 import { generateImage, generateImageStream, checkHealth, type ProgressUpdate, type GenerateResponse, type GenerateRequest } from "@/lib/api"
 import { RESOLUTION_PRESETS, type GeneratedImage } from "@/types"
 import { toast } from "sonner"
@@ -57,6 +58,7 @@ export default function Home() {
   const [seed, setSeed] = useState<number>(-1)
   const [steps, setSteps] = useState(9)
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isAnimating, setIsAnimating] = useState(false)
   const [currentImage, setCurrentImage] = useState<GeneratedImage | null>(null)
   const [gallery, setGallery] = useState<GeneratedImage[]>([])
   const [apiHealth, setApiHealth] = useState<boolean | null>(null)
@@ -101,6 +103,8 @@ export default function Home() {
 
   const processQueueItem = useCallback(async (request: GenerateRequest) => {
     setIsGenerating(true)
+    setIsAnimating(true)
+    setCurrentImage(null)
     setProgressValue(0)
     setCurrentStep(0)
     setTotalSteps(request.num_inference_steps || steps)
@@ -278,14 +282,21 @@ export default function Home() {
                       <button
                         key={preset.label}
                         onClick={() => handlePresetSelect(preset)}
-                        className={`p-2 rounded-lg border text-xs transition-all ${width === preset.width && height === preset.height
+                        className={`p-2 rounded-lg border text-xs transition-all flex flex-col items-center gap-2 relative group ${width === preset.width && height === preset.height
                           ? "bg-primary/10 border-primary text-primary font-medium"
                           : "bg-muted/50 border-transparent hover:bg-muted text-muted-foreground"
                           }`}
+                        title={preset.hint}
                       >
-                        <div className="mb-1 aspect-square w-full bg-current opacity-20 rounded-sm"
+                        <div className="aspect-square w-full bg-current opacity-20 rounded-sm"
                           style={{ aspectRatio: `${preset.width}/${preset.height}` }} />
-                        {preset.label}
+                        <span>{preset.label}</span>
+
+                        {/* Tooltip Hint */}
+                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-50">
+                          {preset.hint}
+                          <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 border-4 border-transparent border-t-popover" />
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -395,7 +406,21 @@ export default function Home() {
           {/* Image Display Area */}
           <div className="flex-1 flex items-center justify-center p-4 sm:p-8 lg:p-12 relative">
             <AnimatePresence mode="wait">
-              {currentImage ? (
+              {isAnimating ? (
+                <motion.div
+                  key="printer"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="w-full h-full flex items-center justify-center"
+                >
+                  <PrinterAnimation
+                    prompt={prompt}
+                    image={currentImage?.imageBase64 || null}
+                    onComplete={() => setIsAnimating(false)}
+                  />
+                </motion.div>
+              ) : currentImage ? (
                 <motion.div
                   key={currentImage.id}
                   variants={scaleIn}
@@ -603,6 +628,9 @@ export default function Home() {
                             <Button size="icon" variant="secondary" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleDownload(img) }}>
                               <Download className="w-4 h-4" />
                             </Button>
+                          </div>
+                          <div className="absolute bottom-1 right-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded backdrop-blur-sm pointer-events-none">
+                            {(img.generationTimeMs / 1000).toFixed(1)}s
                           </div>
                         </motion.div>
                       ))}

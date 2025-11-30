@@ -15,13 +15,14 @@ export type ResolutionPreset = {
   label: string
   width: number
   height: number
+  hint: string
 }
 
 export const RESOLUTION_PRESETS: ResolutionPreset[] = [
-  { label: "Square (1024×1024)", width: 1024, height: 1024 },
-  { label: "Portrait (768×1152)", width: 768, height: 1152 },
-  { label: "Landscape (1152×768)", width: 1152, height: 768 },
-  { label: "Wide (1344×768)", width: 1344, height: 768 },
-  { label: "Tall (768×1344)", width: 768, height: 1344 },
+  { label: "Square", width: 1024, height: 1024, hint: "Best for Instagram & avatars" },
+  { label: "Portrait", width: 768, height: 1152, hint: "Ideal for phone wallpapers & portraits" },
+  { label: "Landscape", width: 1152, height: 768, hint: "Great for desktop wallpapers & scenery" },
+  { label: "Wide", width: 1344, height: 768, hint: "Cinematic 16:9 look" },
+  { label: "Tall", width: 768, height: 1344, hint: "Full vertical for stories" },
 ]
 
