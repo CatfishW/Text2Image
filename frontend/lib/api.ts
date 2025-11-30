@@ -48,9 +48,35 @@ export async function generateImage(
 
 export async function checkHealth(): Promise<boolean> {
   try {
-    const response = await fetch(`${API_URL}/health`)
-    return response.ok
-  } catch {
+    // Create an AbortController for timeout
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
+    
+    const response = await fetch(`${API_URL}/health`, {
+      method: "GET",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+      },
+    })
+    
+    clearTimeout(timeoutId)
+    
+    if (!response.ok) {
+      return false
+    }
+    
+    // Parse the response to check the actual status
+    const data = await response.json()
+    // Check if status is "healthy" or if gateway is "running" (degraded is still considered online)
+    return data.status === "healthy" || data.gateway === "running"
+  } catch (error) {
+    // Handle network errors, timeouts, and other failures
+    if (error instanceof Error && error.name === "AbortError") {
+      console.warn("Health check timed out")
+    } else {
+      console.warn("Health check failed:", error)
+    }
     return false
   }
 }

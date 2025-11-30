@@ -126,12 +126,23 @@ export default function Home() {
   const [progressValue, setProgressValue] = useState(0)
   const [showTips, setShowTips] = useState(true)
 
-  // Check API health on mount
+  // Check API health on mount and periodically
   useEffect(() => {
-    checkHealth().then(setApiHealth)
-    const interval = setInterval(() => {
-      checkHealth().then(setApiHealth)
-    }, 30000)
+    // Check immediately on mount
+    const performHealthCheck = async () => {
+      try {
+        const isHealthy = await checkHealth()
+        setApiHealth(isHealthy)
+      } catch (error) {
+        console.error("Health check error:", error)
+        setApiHealth(false)
+      }
+    }
+    
+    performHealthCheck()
+    
+    // Check every 30 seconds
+    const interval = setInterval(performHealthCheck, 30000)
     return () => clearInterval(interval)
   }, [])
 
