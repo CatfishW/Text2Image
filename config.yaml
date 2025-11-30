@@ -1,0 +1,52 @@
+# Text2Image Server Configuration
+# Modify these settings to configure the server
+
+# ============================================================================
+# Concurrency Settings
+# ============================================================================
+concurrency:
+  # Maximum concurrent image generations (adjust based on GPU VRAM)
+  # Recommended: 1-4 depending on GPU memory
+  max_concurrent: 4
+  
+  # Maximum number of requests in queue
+  max_queue: 50
+  
+  # Request timeout in seconds (5 minutes default)
+  request_timeout: 300
+
+# ============================================================================
+# Model Settings
+# ============================================================================
+model:
+  # Model name from HuggingFace
+  name: "Tongyi-MAI/Z-Image-Turbo"
+  
+  # Torch dtype: "bfloat16", "float16", or "float32"
+  # bfloat16 is recommended for modern GPUs
+  torch_dtype: "bfloat16"
+  
+  # Enable model compilation (faster inference, slower first run)
+  # NOTE: Requires Triton to be installed (pip install triton)
+  # If Triton is not available, compilation will be automatically disabled
+  enable_compilation: false
+  
+  # Enable CPU offloading (saves GPU memory, slower inference)
+  # Recommended for GPUs with < 12GB VRAM
+  enable_cpu_offload: false
+  
+  # Enable Flash Attention (faster attention computation)
+  # Requires compatible GPU and CUDA version
+  enable_flash_attention: false
+
+# ============================================================================
+# Storage Settings
+# ============================================================================
+storage:
+  # Directory to save generated images (relative to script location)
+  images_dir: "images"
+  
+  # Whether to save images to disk
+  # Set to true to save, false to only return base64
+  save_images: false
+

@@ -1,0 +1,21 @@
+# Core ML and Deep Learning
+torch>=2.0.0
+diffusers>=0.30.0
+
+# Web Framework and Server
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+pydantic>=2.0.0
+
+# HTTP Clients
+requests>=2.31.0
+httpx>=0.25.0
+
+# Configuration
+PyYAML>=6.0
+
+# Optional: Model Compilation (for faster inference)
+# Uncomment if you want to enable model compilation
+# Note: Triton installation can be complex and may require specific CUDA versions
+# triton>=2.0.0
+
