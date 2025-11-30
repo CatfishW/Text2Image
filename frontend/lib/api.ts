@@ -90,19 +90,7 @@ export async function generateImageStream(
   onProgress: ProgressCallback
 ): Promise<GenerateResponse> {
   return new Promise((resolve, reject) => {
-    const eventSource = new EventSource(
-      `${getApiUrl()}/generate-stream?${new URLSearchParams({
-        prompt: request.prompt,
-        negative_prompt: request.negative_prompt || "",
-        height: String(request.height || 1024),
-        width: String(request.width || 1024),
-        seed: String(request.seed === undefined ? -1 : request.seed),
-        num_inference_steps: String(request.num_inference_steps || 9),
-        guidance_scale: String(request.guidance_scale || 0.0),
-      })}`
-    )
-
-    // EventSource doesn't support POST, so we need to use fetch with ReadableStream
+    // Use fetch with ReadableStream for SSE (EventSource only supports GET)
     fetch(`${getApiUrl()}/generate-stream`, {
       method: "POST",
       headers: {
@@ -119,18 +107,46 @@ export async function generateImageStream(
       }),
     })
       .then(async (response) => {
-        if (!response.ok) {
-          const error = await response.json().catch(() => ({ detail: "Unknown error" }))
-          reject(new Error(error.detail || `HTTP error! status: ${response.status}`))
-          return
-        }
-
         const reader = response.body?.getReader()
         const decoder = new TextDecoder()
         let buffer = ""
 
         if (!reader) {
-          reject(new Error("Response body is not readable"))
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: "Unknown error" }))
+            reject(new Error(error.detail || `HTTP error! status: ${response.status}`))
+          } else {
+            reject(new Error("Response body is not readable"))
+          }
+          return
+        }
+
+        // Even if response is not ok, try to read error message from stream
+        if (!response.ok) {
+          // Try to read error message from stream
+          try {
+            const { done, value } = await reader.read()
+            if (!done && value) {
+              buffer += decoder.decode(value, { stream: true })
+              const lines = buffer.split("\n")
+              for (const line of lines) {
+                if (line.startsWith("data: ")) {
+                  try {
+                    const data = JSON.parse(line.slice(6))
+                    if (data.type === "error") {
+                      reject(new Error(data.message || "Generation failed"))
+                      return
+                    }
+                  } catch (e) {
+                    // Fall through to generic error
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            // Fall through to generic error
+          }
+          reject(new Error(`HTTP error! status: ${response.status}`))
           return
         }
 
