@@ -1,4 +1,5 @@
 import platform
+from pathlib import Path
 import torch
 from diffusers import ZImagePipeline
 
@@ -24,11 +25,47 @@ torch.backends.cudnn.allow_tf32 = True
 # 1. Load the pipeline with speed optimizations
 # ============================================================================
 
+# Try to use local model if available
+MODEL_NAME = "Tongyi-MAI/Z-Image-Turbo"
+local_model_path = None
+
+# Check current directory for model folders
+current_dir = Path(".")
+potential_folders = [
+    "models--Tongyi-MAI--Z-Image-Turbo",
+    "models--Tongyi-AI--Z-Image-Turbo",
+    "Tongyi-MAI-Z-Image-Turbo",
+]
+
+for folder_name in potential_folders:
+    folder_path = current_dir / folder_name
+    if folder_path.exists() and folder_path.is_dir():
+        # Check for config.json or model files
+        if (folder_path / "config.json").exists() or list(folder_path.glob("*.safetensors")):
+            # Check snapshots subdirectory (HuggingFace cache format)
+            snapshots_dir = folder_path / "snapshots"
+            if snapshots_dir.exists():
+                for snapshot in snapshots_dir.iterdir():
+                    if snapshot.is_dir() and (snapshot / "config.json").exists():
+                        local_model_path = str(snapshot.resolve())
+                        print(f"✓ Using local model from: {local_model_path}")
+                        break
+                if local_model_path:
+                    break
+            else:
+                local_model_path = str(folder_path.resolve())
+                print(f"✓ Using local model from: {local_model_path}")
+                break
+
+if not local_model_path:
+    print(f"Local model not found, will download from HuggingFace: {MODEL_NAME}")
+
 # Use bfloat16 for optimal performance on supported GPUs
 pipe = ZImagePipeline.from_pretrained(
-    "Tongyi-MAI/Z-Image-Turbo",
+    local_model_path if local_model_path else MODEL_NAME,
     torch_dtype=torch.bfloat16,
     low_cpu_mem_usage=False,  # Faster loading if you have enough RAM
+    local_files_only=(local_model_path is not None),
 )
 pipe.to("cuda")
 

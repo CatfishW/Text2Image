@@ -89,6 +89,7 @@ def load_config(config_path: str = "config.yaml") -> Dict:
         },
         "model": {
             "name": "Tongyi-MAI/Z-Image-Turbo",
+            "local_path": None,  # Optional: Explicit path to local model (if None, auto-detect)
             "torch_dtype": "bfloat16",
             "enable_compilation": True,  # Enable by default for speed
             "enable_torch_compile": True,  # Use modern torch.compile() instead
@@ -144,6 +145,109 @@ def check_triton_available() -> bool:
     except ImportError:
         return False
 
+# ============================================================================
+# Local Model Detection
+# ============================================================================
+
+def find_local_model(model_name: str, explicit_path: Optional[str] = None) -> Optional[str]:
+    """
+    Find local model path if available.
+    Checks in order:
+    1. Explicit path from config (if provided)
+    2. HuggingFace cache directory
+    3. Current directory (models--* format)
+    4. ./models/ directory
+    5. Return None to download from HuggingFace
+    """
+    # 1. Check explicit path from config
+    if explicit_path:
+        explicit_path = Path(explicit_path).expanduser().resolve()
+        if explicit_path.exists():
+            # Check if it's a directory with model files
+            if explicit_path.is_dir():
+                # Check for common model files
+                model_files = list(explicit_path.glob("*.safetensors")) + \
+                             list(explicit_path.glob("*.bin")) + \
+                             list(explicit_path.glob("*.pt"))
+                if model_files or (explicit_path / "config.json").exists():
+                    print(f"✓ Found explicit local model path: {explicit_path}")
+                    return str(explicit_path)
+            else:
+                # Single file path
+                if explicit_path.exists():
+                    print(f"✓ Found explicit local model file: {explicit_path}")
+                    return str(explicit_path)
+    
+    # 2. Check current directory for model folders (models--* format)
+    # Check for any folder starting with "models--" that might contain the model
+    current_dir = Path(".").resolve()
+    cache_name = model_name.replace("/", "--")
+    org, model = model_name.split("/", 1) if "/" in model_name else ("", model_name)
+    
+    # Potential folder names to check
+    potential_folder_names = [
+        f"models--{cache_name}",
+        f"models--{org}--{model.replace('-', '--')}" if org else None,
+        f"models--Tongyi-AI--Z-Image-Turbo",  # Common variant
+        cache_name,
+    ]
+    
+    for folder_name in potential_folder_names:
+        if not folder_name:
+            continue
+        folder_path = current_dir / folder_name
+        if folder_path.exists() and folder_path.is_dir():
+            # Check for model files or config
+            model_files = list(folder_path.glob("*.safetensors")) + \
+                         list(folder_path.glob("*.bin")) + \
+                         list(folder_path.glob("*.pt"))
+            config_file = folder_path / "config.json"
+            # Also check in snapshots subdirectory (HF cache structure)
+            snapshots_dir = folder_path / "snapshots"
+            if snapshots_dir.exists():
+                for snapshot in snapshots_dir.iterdir():
+                    if snapshot.is_dir():
+                        if (snapshot / "config.json").exists():
+                            print(f"✓ Found local model in current directory: {snapshot}")
+                            return str(snapshot.resolve())
+            elif model_files or config_file.exists():
+                print(f"✓ Found local model in current directory: {folder_path}")
+                return str(folder_path.resolve())
+    
+    # 3. Check HuggingFace cache directory
+    hf_home = os.environ.get("HF_HOME") or os.environ.get("HUGGINGFACE_HUB_CACHE")
+    if not hf_home:
+        # Default cache locations
+        if IS_WINDOWS:
+            hf_home = Path.home() / ".cache" / "huggingface" / "hub"
+        else:
+            hf_home = Path.home() / ".cache" / "huggingface" / "hub"
+    
+    hf_cache_path = Path(hf_home).expanduser()
+    potential_cache_dirs = [
+        hf_cache_path / f"models--{cache_name}",
+    ]
+    
+    for cache_dir in potential_cache_dirs:
+        if cache_dir.exists() and cache_dir.is_dir():
+            # Check in snapshots subdirectory (HF cache structure)
+            snapshots_dir = cache_dir / "snapshots"
+            if snapshots_dir.exists():
+                for snapshot in snapshots_dir.iterdir():
+                    if snapshot.is_dir():
+                        if (snapshot / "config.json").exists():
+                            print(f"✓ Found local model in HuggingFace cache: {snapshot}")
+                            return str(snapshot)
+    
+    # 4. Check ./models/ directory
+    models_dir = Path(".") / "models" / cache_name
+    if models_dir.exists() and models_dir.is_dir():
+        if (models_dir / "config.json").exists():
+            print(f"✓ Found local model in ./models/: {models_dir}")
+            return str(models_dir.resolve())
+    
+    return None
+
 # Load configuration
 config = load_config()
 
@@ -154,6 +258,7 @@ REQUEST_TIMEOUT = config["concurrency"]["request_timeout"]
 
 # Model settings
 MODEL_NAME = config["model"]["name"]
+MODEL_LOCAL_PATH = config["model"].get("local_path")  # Optional explicit local path
 dtype_str = config["model"]["torch_dtype"].lower()
 if dtype_str == "bfloat16":
     TORCH_DTYPE = torch.bfloat16
@@ -274,10 +379,21 @@ async def lifespan(app: FastAPI):
     # Startup
     print("\nLoading model...")
     try:
+        # Try to find local model first
+        local_model_path = find_local_model(MODEL_NAME, MODEL_LOCAL_PATH)
+        
+        if local_model_path:
+            print(f"Using local model from: {local_model_path}")
+            model_path = local_model_path
+        else:
+            print(f"Local model not found, will download from HuggingFace: {MODEL_NAME}")
+            model_path = MODEL_NAME
+        
         pipe = ZImagePipeline.from_pretrained(
-            MODEL_NAME,
+            model_path,
             torch_dtype=TORCH_DTYPE,
             low_cpu_mem_usage=LOW_CPU_MEM_USAGE,
+            local_files_only=(local_model_path is not None),  # Only use local files if we found a local path
         )
         
         # Memory optimization: CPU offloading (must be done before moving to CUDA)

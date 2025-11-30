@@ -23,6 +23,13 @@ model:
   name: "Tongyi-MAI/Z-Image-Turbo"
   # name: "Disty0/Z-Image-Turbo-SDNQ-uint4-svd-r32"
   
+  # Optional: Explicit path to local model directory
+  # If set, will use this path directly. If None/empty, will auto-detect local models.
+  # Auto-detection checks: HuggingFace cache, current directory, ./models/
+  # Example: local_path: "./models--Tongyi-MAI--Z-Image-Turbo"
+  # Example: local_path: "C:/Users/username/.cache/huggingface/hub/models--Tongyi-MAI--Z-Image-Turbo"
+  local_path: null
+  
   # Torch dtype: "bfloat16", "float16", or "float32"
   # bfloat16 is recommended for modern GPUs (fastest)
   torch_dtype: "bfloat16" 
@@ -52,8 +59,8 @@ model:
   
   # Enable VAE tiling (memory efficient for large images, minimal speed impact)
   # Better than slicing - enables efficient processing of large images
-  enable_vae_tiling: true
-  
+  enable_vae_tiling: false
+    
   # Enable attention slicing (reduces VRAM usage, SLOWS DOWN inference)
   # DISABLED for speed - only enable if you run out of VRAM
   enable_attention_slicing: false
