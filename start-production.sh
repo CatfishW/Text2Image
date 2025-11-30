@@ -206,8 +206,9 @@ echo ""
 echo -e "${YELLOW}Starting Frontend...${NC}"
 cd "$FRONTEND_DIR" || exit 1
 
-# Set API URL
+# Set API URL and port
 export NEXT_PUBLIC_API_URL="http://localhost:${BACKEND_PORT}"
+export PORT=${FRONTEND_PORT}
 
 # Start frontend in background
 npm start &
