@@ -26,7 +26,10 @@ import {
   Share2,
   X,
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  Trash2,
+  List,
+  Clock
 } from "lucide-react"
 
 // Animation variants
@@ -65,6 +68,7 @@ export default function Home() {
   // UI State
   const [showSettings, setShowSettings] = useState(true)
   const [showGallery, setShowGallery] = useState(false)
+  const [activeSidebarTab, setActiveSidebarTab] = useState<"history" | "queue">("history")
   const [isFullscreen, setIsFullscreen] = useState(false)
 
   // Refs
@@ -205,8 +209,15 @@ export default function Home() {
     setQueue((prev) => [...prev, request])
     if (isGenerating || queue.length > 0) {
       toast.success("Added to queue")
+      setShowGallery(true)
+      setActiveSidebarTab("queue")
     }
   }, [prompt, negativePrompt, width, height, seed, steps, apiHealth, isGenerating, queue.length])
+
+  const removeFromQueue = (index: number) => {
+    setQueue((prev) => prev.filter((_, i) => i !== index))
+    toast.success("Removed from queue")
+  }
 
   const handleRandomSeed = () => {
     const newSeed = Math.floor(Math.random() * 2 ** 32)
@@ -444,7 +455,7 @@ export default function Home() {
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value.slice(0, 2000))}
                   placeholder="Describe your imagination..."
-                  className="min-h-[60px] max-h-[120px] pr-48 bg-transparent border-none focus-visible:ring-0 resize-none text-base py-3 px-4"
+                  className="min-h-[60px] max-h-[120px] pr-[250px] bg-transparent border-none focus-visible:ring-0 resize-none text-base py-3 px-4"
                   maxLength={2000}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -501,36 +512,106 @@ export default function Home() {
                 initial={{ width: 0, opacity: 0 }}
                 animate={{ width: 320, opacity: 1 }}
                 exit={{ width: 0, opacity: 0 }}
-                className="border-l border-border bg-card/50 backdrop-blur-sm hidden xl:flex flex-col"
+                className="border-l border-border bg-card/50 backdrop-blur-sm hidden md:flex flex-col z-20 absolute right-0 top-0 bottom-0 shadow-2xl"
               >
-                <div className="p-4 border-b border-border flex items-center justify-between">
-                  <h3 className="font-semibold flex items-center gap-2">
-                    <History className="w-4 h-4" />
-                    History
-                  </h3>
-                  <Button variant="ghost" size="icon" onClick={() => setShowGallery(false)}>
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-                <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                  {gallery.map((img) => (
-                    <motion.div
-                      key={img.id}
-                      layoutId={img.id}
-                      className="group relative aspect-square rounded-lg overflow-hidden cursor-pointer ring-1 ring-border hover:ring-primary transition-all"
-                      onClick={() => setCurrentImage(img)}
+                <div className="p-3 border-b border-border">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <History className="w-4 h-4" />
+                      Activity
+                    </h3>
+                    <Button variant="ghost" size="icon" onClick={() => setShowGallery(false)} className="h-8 w-8">
+                      <X className="w-4 h-4" />
+                    </Button>
+                  </div>
+
+                  <div className="flex p-1 bg-muted/50 rounded-lg">
+                    <button
+                      onClick={() => setActiveSidebarTab("queue")}
+                      className={`flex-1 flex items-center justify-center gap-2 text-xs font-medium py-1.5 rounded-md transition-all ${activeSidebarTab === "queue"
+                        ? "bg-background shadow-sm text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                        }`}
                     >
-                      <img src={img.imageBase64} alt={img.prompt} className="w-full h-full object-cover" />
-                      <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                        <Button size="icon" variant="secondary" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleDownload(img) }}>
-                          <Download className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </motion.div>
-                  ))}
-                  {gallery.length === 0 && (
-                    <div className="text-center text-muted-foreground py-8 text-sm">
-                      No images generated yet.
+                      <List className="w-3 h-3" />
+                      Queue ({queue.length})
+                    </button>
+                    <button
+                      onClick={() => setActiveSidebarTab("history")}
+                      className={`flex-1 flex items-center justify-center gap-2 text-xs font-medium py-1.5 rounded-md transition-all ${activeSidebarTab === "history"
+                        ? "bg-background shadow-sm text-foreground"
+                        : "text-muted-foreground hover:text-foreground"
+                        }`}
+                    >
+                      <Clock className="w-3 h-3" />
+                      History ({gallery.length})
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                  {activeSidebarTab === "queue" ? (
+                    <div className="space-y-3">
+                      {queue.length === 0 && (
+                        <div className="text-center text-muted-foreground py-8 text-sm flex flex-col items-center gap-2">
+                          <List className="w-8 h-8 opacity-20" />
+                          <p>Queue is empty</p>
+                        </div>
+                      )}
+                      {queue.map((req, i) => (
+                        <motion.div
+                          key={`queue-${i}`}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0, scale: 0.9 }}
+                          className="bg-muted/30 rounded-lg p-3 border border-border flex gap-3 group relative overflow-hidden"
+                        >
+                          <div className="absolute left-0 top-0 bottom-0 w-1 bg-primary/20" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate pr-6" title={req.prompt}>{req.prompt}</p>
+                            <div className="flex items-center gap-2 mt-1.5 text-xs text-muted-foreground">
+                              <span className="bg-primary/10 text-primary px-1.5 py-0.5 rounded flex items-center gap-1">
+                                <Clock className="w-3 h-3" />
+                                Waiting
+                              </span>
+                              <span>{req.width}x{req.height}</span>
+                              <span>{req.num_inference_steps} steps</span>
+                            </div>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive hover:bg-destructive/10 absolute right-2 top-2"
+                            onClick={() => removeFromQueue(i)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        </motion.div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {gallery.map((img) => (
+                        <motion.div
+                          key={img.id}
+                          layoutId={img.id}
+                          className="group relative aspect-square rounded-lg overflow-hidden cursor-pointer ring-1 ring-border hover:ring-primary transition-all"
+                          onClick={() => setCurrentImage(img)}
+                        >
+                          <img src={img.imageBase64} alt={img.prompt} className="w-full h-full object-cover" />
+                          <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                            <Button size="icon" variant="secondary" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); handleDownload(img) }}>
+                              <Download className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </motion.div>
+                      ))}
+                      {gallery.length === 0 && (
+                        <div className="text-center text-muted-foreground py-8 text-sm flex flex-col items-center gap-2">
+                          <History className="w-8 h-8 opacity-20" />
+                          <p>No images generated yet.</p>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -542,7 +623,7 @@ export default function Home() {
         {/* Gallery Toggle (if hidden) */}
         {
           !showGallery && (
-            <div className="absolute right-0 top-1/2 -translate-y-1/2 z-20 hidden xl:block">
+            <div className="absolute right-0 top-1/2 -translate-y-1/2 z-20 hidden md:block">
               <Button
                 variant="secondary"
                 size="sm"
