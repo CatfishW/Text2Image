@@ -1,4 +1,21 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:21115"
+// Get API URL from environment or construct from current host
+function getApiUrl(): string {
+  // If explicitly set in environment, use that
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL
+  }
+  
+  // In browser, use same host as current page but with backend port
+  if (typeof window !== 'undefined') {
+    const protocol = window.location.protocol
+    const hostname = window.location.hostname
+    // Backend runs on port 21115
+    return `${protocol}//${hostname}:21115`
+  }
+  
+  // Fallback for server-side rendering
+  return "http://localhost:21115"
+}
 
 export interface GenerateRequest {
   prompt: string
@@ -22,7 +39,7 @@ export interface GenerateResponse {
 export async function generateImage(
   request: GenerateRequest
 ): Promise<GenerateResponse> {
-  const response = await fetch(`${API_URL}/generate`, {
+  const response = await fetch(`${getApiUrl()}/generate`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -52,7 +69,7 @@ export async function checkHealth(): Promise<boolean> {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 5000) // 5 second timeout
     
-    const response = await fetch(`${API_URL}/health`, {
+    const response = await fetch(`${getApiUrl()}/health`, {
       method: "GET",
       signal: controller.signal,
       headers: {
