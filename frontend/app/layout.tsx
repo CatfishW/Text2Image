@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Rowan University - AI Image Generation Studio",
   description: "Generate stunning images from text prompts using AI. Powered by Rowan University.",
-  authors: [{ name: "Yanlai Wu", email: "wuyanl37@rowan.edu" }],
+  authors: [{ name: "Yanlai Wu", url: "mailto:wuyanl37@rowan.edu" }],
 };
 
 export default function RootLayout({
