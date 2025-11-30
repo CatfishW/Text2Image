@@ -255,7 +255,20 @@ export default function Home() {
 
       <Navbar activeTab={activeTab} onTabChange={setActiveTab} apiHealth={apiHealth} />
 
-      <main className="flex-1 relative z-10 flex h-[calc(100vh-4rem)]">
+      <main className="flex-1 relative z-10 flex flex-col md:flex-row h-[calc(100vh-5rem)] md:h-[calc(100vh-5rem)] overflow-hidden">
+
+        {/* Mobile Sidebar Backdrop */}
+        <AnimatePresence>
+          {(showSettings || (showGallery && window.innerWidth < 768)) && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => { setShowSettings(false); setShowGallery(false); }}
+              className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30 md:hidden"
+            />
+          )}
+        </AnimatePresence>
 
         {/* Left Sidebar - Settings */}
         <AnimatePresence mode="wait">
@@ -265,7 +278,7 @@ export default function Home() {
               animate={{ x: 0, opacity: 1 }}
               exit={{ x: -320, opacity: 0 }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
-              className="w-80 glass-panel h-full overflow-y-auto hidden md:block"
+              className="fixed inset-y-0 left-0 z-40 w-80 glass-panel h-full overflow-y-auto md:relative md:block shadow-2xl md:shadow-none"
             >
               <div className="p-6 space-y-8">
                 <div className="flex items-center justify-between mb-6">
@@ -273,6 +286,9 @@ export default function Home() {
                     <Settings2 className="w-5 h-5 text-primary" />
                     CONFIGURATION
                   </h2>
+                  <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setShowSettings(false)}>
+                    <X className="w-5 h-5" />
+                  </Button>
                 </div>
 
                 {/* Dimensions */}
@@ -294,7 +310,7 @@ export default function Home() {
                         <span>{preset.label}</span>
 
                         {/* Tooltip Hint */}
-                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[100]">
+                        <div className="absolute -top-12 left-1/2 -translate-x-1/2 bg-popover text-popover-foreground text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-[100] hidden md:block">
                           {preset.hint}
                           <div className="absolute bottom-[-4px] left-1/2 -translate-x-1/2 border-4 border-transparent border-t-popover" />
                         </div>
@@ -415,16 +431,27 @@ export default function Home() {
         </AnimatePresence>
 
         {/* Main Stage */}
-        <div className="flex-1 flex flex-col relative overflow-hidden">
-          {/* Toggle Sidebar Button */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="absolute top-4 left-4 z-20 md:hidden"
-            onClick={() => setShowSettings(!showSettings)}
-          >
-            {showSettings ? <X className="w-5 h-5" /> : <Settings2 className="w-5 h-5" />}
-          </Button>
+        <div className="flex-1 flex flex-col relative overflow-hidden w-full">
+          {/* Mobile Header Controls */}
+          <div className="absolute top-4 left-4 right-4 z-20 flex justify-between md:hidden pointer-events-none">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="pointer-events-auto shadow-lg bg-background/80 backdrop-blur-md border border-border"
+              onClick={() => setShowSettings(!showSettings)}
+            >
+              <Settings2 className="w-5 h-5" />
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="icon"
+              className="pointer-events-auto shadow-lg bg-background/80 backdrop-blur-md border border-border"
+              onClick={() => setShowGallery(!showGallery)}
+            >
+              <History className="w-5 h-5" />
+            </Button>
+          </div>
 
           {/* Image Display Area */}
           <div className="flex-1 flex items-center justify-center p-4 sm:p-8 lg:p-12 relative">
@@ -490,7 +517,7 @@ export default function Home() {
           </div>
 
           {/* Bottom Floating Bar */}
-          <div className="w-full max-w-3xl mx-auto p-6 pb-10 relative z-20">
+          <div className="w-full max-w-3xl mx-auto p-4 md:p-6 pb-20 md:pb-10 relative z-20">
             <motion.div
               className="glass-card rounded-2xl p-1.5 shadow-2xl ring-1 ring-white/10 bg-background/40 backdrop-blur-xl"
               initial={{ y: 50, opacity: 0 }}
@@ -503,7 +530,7 @@ export default function Home() {
                   value={prompt}
                   onChange={(e) => setPrompt(e.target.value.slice(0, 2000))}
                   placeholder="Describe your imagination..."
-                  className="min-h-[60px] max-h-[120px] pr-[250px] bg-transparent border-none focus-visible:ring-0 resize-none text-base py-3 px-4"
+                  className="min-h-[60px] max-h-[120px] pr-[100px] md:pr-[250px] bg-transparent border-none focus-visible:ring-0 resize-none text-sm md:text-base py-3 px-4"
                   maxLength={2000}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !e.shiftKey) {
@@ -524,13 +551,13 @@ export default function Home() {
                   >
                     {isGenerating ? (
                       <>
-                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
-                        {queue.length > 0 ? `Queue (${queue.length})` : "Generating..."}
+                        <Loader2 className="w-4 h-4 animate-spin md:mr-2" />
+                        <span className="hidden md:inline">{queue.length > 0 ? `Queue (${queue.length})` : "Generating..."}</span>
                       </>
                     ) : (
                       <>
-                        <Sparkles className="w-4 h-4 mr-2" />
-                        {queue.length > 0 ? `Queue (${queue.length})` : "Generate"}
+                        <Sparkles className="w-4 h-4 md:mr-2" />
+                        <span className="hidden md:inline">{queue.length > 0 ? `Queue (${queue.length})` : "Generate"}</span>
                       </>
                     )}
                   </Button>
@@ -557,10 +584,10 @@ export default function Home() {
           {
             showGallery && (
               <motion.aside
-                initial={{ width: 0, opacity: 0 }}
-                animate={{ width: 320, opacity: 1 }}
-                exit={{ width: 0, opacity: 0 }}
-                className="border-l border-border bg-card/50 backdrop-blur-sm hidden md:flex flex-col z-20 absolute right-0 top-0 bottom-0 shadow-2xl"
+                initial={{ x: 320, opacity: 0 }}
+                animate={{ x: 0, opacity: 1 }}
+                exit={{ x: 320, opacity: 0 }}
+                className="fixed inset-y-0 right-0 z-40 w-80 border-l border-border bg-card/95 backdrop-blur-xl md:relative md:bg-card/50 md:backdrop-blur-sm flex flex-col shadow-2xl"
               >
                 <div className="p-3 border-b border-border">
                   <div className="flex items-center justify-between mb-3">
@@ -671,7 +698,7 @@ export default function Home() {
           }
         </AnimatePresence >
 
-        {/* Gallery Toggle (if hidden) */}
+        {/* Gallery Toggle (Desktop) */}
         {
           !showGallery && (
             <div className="absolute right-0 top-1/2 -translate-y-1/2 z-20 hidden md:block">

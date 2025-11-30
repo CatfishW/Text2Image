@@ -7,7 +7,7 @@
 concurrency:
   # Maximum concurrent image generations (adjust based on GPU VRAM)
   # Recommended: 1-2 for lower VRAM usage, 3-4 for GPUs with 24GB+ VRAM
-  max_concurrent: 2
+  max_concurrent: 1
   
   # Maximum number of requests in queue
   max_queue: 50

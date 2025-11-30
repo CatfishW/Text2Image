@@ -37,7 +37,7 @@ from collections import deque
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Dict, List
+from typing import Optional, Dict, List, Callable
 from datetime import datetime
 
 import platform
@@ -480,6 +480,10 @@ pipe: Optional[ZImagePipeline] = None
 generation_semaphore = asyncio.Semaphore(MAX_CONCURRENT_GENERATIONS)
 request_queue = asyncio.Queue(maxsize=MAX_QUEUE_SIZE)
 
+# Request tracking for queue system
+pending_requests: Dict[str, 'QueuedRequest'] = {}
+queue_worker_task: Optional[asyncio.Task] = None
+
 # Metrics
 @dataclass
 class ServerMetrics:
@@ -505,7 +509,7 @@ metrics = ServerMetrics()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Load model on startup, cleanup on shutdown"""
-    global pipe, ENABLE_COMPILATION
+    global pipe, ENABLE_COMPILATION, queue_worker_task
     
     print("=" * 60)
     print("Loading ULTRA-HIGH-PERFORMANCE Text-to-Image Server")
@@ -739,6 +743,10 @@ async def lifespan(app: FastAPI):
         print("Server ready! Listening on http://0.0.0.0:8010")
         print("=" * 60 + "\n")
         
+        # Start queue worker
+        queue_worker_task = asyncio.create_task(queue_worker())
+        print("✓ Queue worker started")
+        
     except Exception as e:
         print(f"\n✗ Error loading model: {e}")
         raise
@@ -747,6 +755,24 @@ async def lifespan(app: FastAPI):
     
     # Shutdown
     print("\nShutting down server...")
+    
+    # Stop queue worker
+    if queue_worker_task is not None:
+        queue_worker_task.cancel()
+        try:
+            await queue_worker_task
+        except asyncio.CancelledError:
+            pass
+        print("✓ Queue worker stopped")
+    
+    # Clear pending requests
+    for req_id, queued_req in list(pending_requests.items()):
+        if not queued_req.future.done():
+            queued_req.future.set_exception(
+                HTTPException(status_code=503, detail="Server is shutting down")
+            )
+    pending_requests.clear()
+    
     if pipe is not None:
         del pipe
         torch.cuda.empty_cache()
@@ -804,6 +830,93 @@ class MetricsResponse(BaseModel):
     average_queue_wait_ms: float
     uptime_seconds: float
     requests_per_minute: float
+
+# Request tracking for queue system
+@dataclass
+class QueuedRequest:
+    """Represents a queued generation request"""
+    request_id: str
+    request: GenerateRequest
+    future: asyncio.Future
+    queue_start_time: float
+    queue_position: int
+    progress_callback: Optional[Callable] = None
+
+# ============================================================================
+# Queue Worker
+# ============================================================================
+
+async def queue_worker():
+    """Background worker that processes requests from the queue"""
+    global metrics
+    
+    while True:
+        try:
+            # Get next request from queue
+            queued_req: QueuedRequest = await request_queue.get()
+            
+            # Update metrics
+            metrics.current_queue_size = request_queue.qsize()
+            
+            # Process the request
+            try:
+                # Acquire semaphore to limit concurrent generations
+                async with generation_semaphore:
+                    # Update active generations count
+                    metrics.active_generations = MAX_CONCURRENT_GENERATIONS - generation_semaphore._value
+                    
+                    # Process the generation
+                    result = await asyncio.wait_for(
+                        generate_image_async(
+                            prompt=queued_req.request.prompt,
+                            negative_prompt=queued_req.request.negative_prompt,
+                            height=queued_req.request.height,
+                            width=queued_req.request.width,
+                            seed=queued_req.request.seed,
+                            num_inference_steps=queued_req.request.num_inference_steps,
+                            guidance_scale=queued_req.request.guidance_scale,
+                            queue_start_time=queued_req.queue_start_time,
+                            progress_callback=queued_req.progress_callback,
+                        ),
+                        timeout=REQUEST_TIMEOUT
+                    )
+                    
+                    # Set result in future
+                    if not queued_req.future.done():
+                        queued_req.future.set_result(result)
+                    
+            except asyncio.TimeoutError:
+                metrics.failed_generations += 1
+                if not queued_req.future.done():
+                    queued_req.future.set_exception(
+                        HTTPException(
+                            status_code=504,
+                            detail=f"Request timed out after {REQUEST_TIMEOUT} seconds"
+                        )
+                    )
+            except Exception as e:
+                metrics.failed_generations += 1
+                if not queued_req.future.done():
+                    queued_req.future.set_exception(e)
+                # Clear cache on error
+                if torch.cuda.is_available():
+                    torch.cuda.empty_cache()
+            
+            finally:
+                # Remove from pending requests
+                pending_requests.pop(queued_req.request_id, None)
+                # Update metrics
+                metrics.current_queue_size = request_queue.qsize()
+                metrics.active_generations = MAX_CONCURRENT_GENERATIONS - generation_semaphore._value
+                request_queue.task_done()
+                
+        except asyncio.CancelledError:
+            # Worker is being shut down
+            break
+        except Exception as e:
+            # Log error but continue processing
+            print(f"Error in queue worker: {e}")
+            await asyncio.sleep(0.1)  # Brief pause before retrying
 
 # ============================================================================
 # Generation Function
@@ -1013,7 +1126,7 @@ async def get_metrics():
 
 @app.post("/generate", response_model=GenerateResponse)
 async def generate_image(request: GenerateRequest):
-    """Generate an image from a text prompt with high concurrency support"""
+    """Generate an image from a text prompt with queue support for multiple users"""
     if pipe is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
     
@@ -1030,34 +1143,47 @@ async def generate_image(request: GenerateRequest):
     metrics.total_requests += 1
     queue_start_time = time.time()
     
-    # Acquire semaphore to limit concurrent generations
+    # Create unique request ID
+    request_id = str(uuid.uuid4())
+    
+    # Create future for result
+    future = asyncio.Future()
+    
+    # Calculate queue position
+    queue_position = request_queue.qsize() + 1
+    
+    # Create queued request
+    queued_req = QueuedRequest(
+        request_id=request_id,
+        request=request,
+        future=future,
+        queue_start_time=queue_start_time,
+        queue_position=queue_position
+    )
+    
+    # Add to pending requests
+    pending_requests[request_id] = queued_req
+    
     try:
-        async with generation_semaphore:
-            # Wrap generation in timeout (compatible with Python < 3.11)
-            result = await asyncio.wait_for(
-                generate_image_async(
-                    prompt=request.prompt,
-                    negative_prompt=request.negative_prompt,
-                    height=request.height,
-                    width=request.width,
-                    seed=request.seed,
-                    num_inference_steps=request.num_inference_steps,
-                    guidance_scale=request.guidance_scale,
-                    queue_start_time=queue_start_time,
-                ),
-                timeout=REQUEST_TIMEOUT
-            )
-            return GenerateResponse(**result)
-    except asyncio.TimeoutError:
-        metrics.failed_generations += 1
-        raise HTTPException(
-            status_code=504,
-            detail=f"Request timed out after {REQUEST_TIMEOUT} seconds"
-        )
+        # Add to queue (non-blocking since we checked it's not full)
+        await request_queue.put(queued_req)
+        
+        # Update metrics
+        metrics.current_queue_size = request_queue.qsize()
+        
+        # Wait for result (this will block until the queue worker processes it)
+        result = await future
+        
+        # Return response
+        return GenerateResponse(**result)
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions
+        raise
     except Exception as e:
+        # Clean up on error
+        pending_requests.pop(request_id, None)
         metrics.failed_generations += 1
-        # Only clear cache on error to free up memory
-        torch.cuda.empty_cache()
         raise HTTPException(
             status_code=500,
             detail=f"Generation failed: {str(e)}"
@@ -1083,6 +1209,7 @@ async def generate_image_stream(request: GenerateRequest):
         """Generator function for SSE events"""
         metrics.total_requests += 1
         queue_start_time = time.time()
+        request_id = str(uuid.uuid4())
         progress_queue = asyncio.Queue()
         
         async def progress_callback(step: int, total_steps: int):
@@ -1098,37 +1225,54 @@ async def generate_image_stream(request: GenerateRequest):
                 "progress": progress
             })
         
+        # Create future for result
+        future = asyncio.Future()
+        
+        # Calculate queue position
+        queue_position = request_queue.qsize() + 1
+        
+        # Create queued request
+        queued_req = QueuedRequest(
+            request_id=request_id,
+            request=request,
+            future=future,
+            queue_start_time=queue_start_time,
+            queue_position=queue_position,
+            progress_callback=progress_callback
+        )
+        
+        # Add to pending requests
+        pending_requests[request_id] = queued_req
+        
         try:
-            async with generation_semaphore:
-                # Start generation task
-                generation_task = asyncio.create_task(
-                    generate_image_async(
-                        prompt=request.prompt,
-                        negative_prompt=request.negative_prompt,
-                        height=request.height,
-                        width=request.width,
-                        seed=request.seed,
-                        num_inference_steps=request.num_inference_steps,
-                        guidance_scale=request.guidance_scale,
-                        queue_start_time=queue_start_time,
-                        progress_callback=progress_callback,
+            # Add to queue
+            await request_queue.put(queued_req)
+            
+            # Update metrics
+            metrics.current_queue_size = request_queue.qsize()
+            
+            # Send queue position update
+            yield f"data: {json.dumps({'type': 'queued', 'queue_position': queue_position, 'request_id': request_id})}\n\n"
+            
+            # Start generation task (will be processed by queue worker)
+            generation_task = asyncio.create_task(future)
+            
+            # Stream progress updates
+            progress_task = None
+            while True:
+                try:
+                    # Create progress queue task if not exists
+                    if progress_task is None or progress_task.done():
+                        progress_task = asyncio.create_task(progress_queue.get())
+                    
+                    # Wait for progress update or generation completion
+                    done, pending = await asyncio.wait(
+                        [generation_task, progress_task],
+                        return_when=asyncio.FIRST_COMPLETED,
+                        timeout=0.1
                     )
-                )
-                
-                # Stream progress updates
-                progress_task = None
-                while True:
-                    try:
-                        # Create progress queue task if not exists
-                        if progress_task is None or progress_task.done():
-                            progress_task = asyncio.create_task(progress_queue.get())
-                        
-                        # Wait for progress update or generation completion
-                        done, pending = await asyncio.wait(
-                            [generation_task, progress_task],
-                            return_when=asyncio.FIRST_COMPLETED
-                        )
-                        
+                    
+                    if done:
                         for task in done:
                             if task == generation_task:
                                 # Generation completed - send final progress update if needed
@@ -1140,29 +1284,36 @@ async def generate_image_stream(request: GenerateRequest):
                             elif task == progress_task:
                                 # Progress update
                                 try:
-                                    progress = await task
+                                    progress = await progress_task
                                     yield f"data: {json.dumps(progress)}\n\n"
                                     # Reset progress task to wait for next update
                                     progress_task = None
                                 except Exception as e:
                                     # If task was cancelled or failed, reset it
                                     progress_task = None
-                                
-                        # Don't cancel generation_task - only cancel the progress_task if we got a progress update
-                        # (it's already been reset above)
+                    else:
+                        # No tasks completed, check if generation is still running
+                        if generation_task.done():
+                            result = await generation_task
+                            yield f"data: {json.dumps({'type': 'progress', 'step': request.num_inference_steps, 'total_steps': request.num_inference_steps, 'progress': 100})}\n\n"
+                            yield f"data: {json.dumps({'type': 'complete', **result})}\n\n"
+                            return
                             
-                    except asyncio.CancelledError:
-                        break
-                    except Exception as e:
-                        # Log error but continue
+                except asyncio.CancelledError:
+                    break
+                except Exception as e:
+                    # Log error but continue
+                    if "CancelledError" not in str(type(e)):
                         print(f"Error in progress streaming: {e}")
-                        break
-                        
+                    break
+                    
         except asyncio.TimeoutError:
             metrics.failed_generations += 1
+            pending_requests.pop(request_id, None)
             yield f"data: {json.dumps({'type': 'error', 'message': f'Request timed out after {REQUEST_TIMEOUT} seconds'})}\n\n"
         except Exception as e:
             metrics.failed_generations += 1
+            pending_requests.pop(request_id, None)
             torch.cuda.empty_cache()
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)})}\n\n"
     
