@@ -39,6 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Dict, List, Callable
 from datetime import datetime
+import logging
 
 import platform
 import torch
@@ -147,7 +148,9 @@ def load_config(config_path: str = "config.yaml") -> Dict:
         },
         "storage": {
             "images_dir": "images",
-            "save_images": False
+            "save_images": False,
+            "image_format": "jpeg",  # "jpeg" for faster transmission, "png" for lossless
+            "jpeg_quality": 90  # 1-100, higher = better quality but larger files
         }
     }
     
@@ -471,6 +474,10 @@ ENABLE_ATTENTION_BACKEND_OPTIMIZATION = config["model"].get("enable_attention_ba
 IMAGES_DIR = Path(config["storage"]["images_dir"])
 IMAGES_DIR.mkdir(exist_ok=True)
 SAVE_IMAGES = config["storage"]["save_images"]
+IMAGE_FORMAT = config["storage"].get("image_format", "jpeg").lower()
+JPEG_QUALITY = config["storage"].get("jpeg_quality", 90)
+# Ensure JPEG quality is in valid range
+JPEG_QUALITY = max(1, min(100, JPEG_QUALITY))
 
 # ============================================================================
 # Global State
@@ -748,7 +755,24 @@ async def lifespan(app: FastAPI):
         print("✓ Queue worker started")
         
     except Exception as e:
-        print(f"\n✗ Error loading model: {e}")
+        error_msg = f"\n✗ Error loading model: {e}"
+        print(error_msg)
+        import traceback
+        traceback.print_exc()
+        
+        # Write to crash log
+        crash_log = Path("server_crash.log")
+        try:
+            with open(crash_log, "a", encoding="utf-8") as f:
+                f.write(f"\n{'='*60}\n")
+                f.write(f"CRASH TIME: {datetime.now().isoformat()}\n")
+                f.write(f"ERROR: Failed to load model during startup\n")
+                f.write(f"{'='*60}\n")
+                f.write("".join(traceback.format_exception(type(e), e, e.__traceback__)))
+                f.write(f"\n{'='*60}\n\n")
+        except:
+            pass
+        
         raise
     
     yield
@@ -1022,26 +1046,52 @@ async def generate_image_async(
         # Execute in thread pool
         image = await loop.run_in_executor(None, _generate)
         
-        # Convert to base64 - use optimized encoding
+        # Convert to base64 - use optimized encoding for faster transmission
         buffer = io.BytesIO()
-        # Use PNG for quality, but optimize if fast encoding is enabled
-        if ENABLE_FAST_IMAGE_ENCODING:
-            # PNG is already quite fast, but we can optimize save parameters
-            # For very large images, consider JPEG with quality 95+ if acceptable
-            # For now, stick with PNG for best quality
-            image.save(buffer, format="PNG", optimize=False)  # optimize=False is faster
+        
+        # Use JPEG for much faster encoding and smaller file size (faster transmission)
+        # JPEG is typically 5-10x smaller than PNG and encodes 2-3x faster
+        if IMAGE_FORMAT == "jpeg" or IMAGE_FORMAT == "jpg":
+            # Convert RGBA to RGB if needed (JPEG doesn't support alpha channel)
+            if image.mode in ("RGBA", "LA", "P"):
+                # Create white background for transparency
+                rgb_image = image.convert("RGB")
+            else:
+                rgb_image = image
+            # Use optimized JPEG encoding settings for speed
+            # optimize=False for faster encoding, quality balance for size
+            rgb_image.save(
+                buffer, 
+                format="JPEG", 
+                quality=JPEG_QUALITY,
+                optimize=False,  # Disable optimization for faster encoding
+                progressive=False  # Disable progressive for faster encoding
+            )
+            mime_type = "image/jpeg"
         else:
-            image.save(buffer, format="PNG")
+            # PNG fallback (lossless but much slower and larger)
+            image.save(buffer, format="PNG", optimize=False)  # optimize=False is faster
+            mime_type = "image/png"
+        
         image_bytes = buffer.getvalue()
         image_base64 = base64.b64encode(image_bytes).decode("utf-8")
-        image_data_uri = f"data:image/png;base64,{image_base64}"
+        image_data_uri = f"data:{mime_type};base64,{image_base64}"
         
         # Optionally save to disk
         image_id = None
         if SAVE_IMAGES:
             image_id = str(uuid.uuid4())
-            image_path = IMAGES_DIR / f"{image_id}.png"
-            image.save(image_path)
+            file_ext = "jpg" if (IMAGE_FORMAT == "jpeg" or IMAGE_FORMAT == "jpg") else "png"
+            image_path = IMAGES_DIR / f"{image_id}.{file_ext}"
+            if IMAGE_FORMAT == "jpeg" or IMAGE_FORMAT == "jpg":
+                # Save as JPEG
+                if image.mode in ("RGBA", "LA", "P"):
+                    image.convert("RGB").save(image_path, format="JPEG", quality=JPEG_QUALITY, optimize=False)
+                else:
+                    image.save(image_path, format="JPEG", quality=JPEG_QUALITY, optimize=False)
+            else:
+                # Save as PNG
+                image.save(image_path)
         
         generation_time_ms = int((time.time() - generation_start) * 1000)
         
@@ -1337,6 +1387,51 @@ async def generate_image_stream(request: GenerateRequest):
 
 if __name__ == "__main__":
     import argparse
+    import traceback
+    import logging
+    
+    # Setup logging for crash detection
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler('server.log'),
+            logging.StreamHandler()
+        ]
+    )
+    logger = logging.getLogger(__name__)
+    
+    # Global exception handler for unhandled exceptions
+    def exception_handler(exc_type, exc_value, exc_traceback):
+        """Handle unhandled exceptions"""
+        if issubclass(exc_type, KeyboardInterrupt):
+            sys.__excepthook__(exc_type, exc_value, exc_traceback)
+            return
+        
+        error_msg = "".join(traceback.format_exception(exc_type, exc_value, exc_traceback))
+        logger.critical(f"Unhandled exception:\n{error_msg}")
+        
+        # Also print to stderr
+        print(f"\n{'='*60}", file=sys.stderr)
+        print(f"CRITICAL: Unhandled exception occurred", file=sys.stderr)
+        print(f"{'='*60}", file=sys.stderr)
+        print(error_msg, file=sys.stderr)
+        
+        # Write to crash log
+        crash_log = Path("server_crash.log")
+        try:
+            with open(crash_log, "a", encoding="utf-8") as f:
+                f.write(f"\n{'='*60}\n")
+                f.write(f"CRASH TIME: {datetime.now().isoformat()}\n")
+                f.write(f"{'='*60}\n")
+                f.write(error_msg)
+                f.write(f"\n{'='*60}\n\n")
+        except:
+            pass
+        
+        sys.__excepthook__(exc_type, exc_value, exc_traceback)
+    
+    sys.excepthook = exception_handler
     
     parser = argparse.ArgumentParser(description="High-Performance Text-to-Image Server")
     parser.add_argument("--host", default="0.0.0.0", help="Host to bind to")
@@ -1351,13 +1446,38 @@ if __name__ == "__main__":
         print("  Each worker loads its own model instance.")
         print("  Recommended: Use 1 worker with higher MAX_CONCURRENT_GENERATIONS")
     
-    uvicorn.run(
-        "text2image_server:app",
-        host=args.host,
-        port=args.port,
-        workers=args.workers,
-        reload=args.reload,
-        log_level="info",
-        timeout_keep_alive=300,
-    )
+    try:
+        logger.info("Starting Text2Image Server...")
+        logger.info(f"Host: {args.host}, Port: {args.port}, Workers: {args.workers}")
+        
+        uvicorn.run(
+            "text2image_server:app",
+            host=args.host,
+            port=args.port,
+            workers=args.workers,
+            reload=args.reload,
+            log_level="info",
+            timeout_keep_alive=300,
+        )
+    except KeyboardInterrupt:
+        logger.info("Server shutdown requested by user")
+        sys.exit(0)
+    except Exception as e:
+        logger.critical(f"Fatal error starting server: {e}", exc_info=True)
+        error_msg = "".join(traceback.format_exception(type(e), e, e.__traceback__))
+        
+        # Write to crash log
+        crash_log = Path("server_crash.log")
+        try:
+            with open(crash_log, "a", encoding="utf-8") as f:
+                f.write(f"\n{'='*60}\n")
+                f.write(f"CRASH TIME: {datetime.now().isoformat()}\n")
+                f.write(f"FATAL ERROR: Failed to start server\n")
+                f.write(f"{'='*60}\n")
+                f.write(error_msg)
+                f.write(f"\n{'='*60}\n\n")
+        except:
+            pass
+        
+        sys.exit(1)
 

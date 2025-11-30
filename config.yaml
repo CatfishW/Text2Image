@@ -90,4 +90,14 @@ storage:
   # Whether to save images to disk
   # Set to true to save, false to only return base64
   save_images: false
+  
+  # Image format for transmission ("jpeg" or "png")
+  # JPEG is much faster and smaller, PNG is lossless
+  # Recommended: "jpeg" for faster transmission
+  image_format: "jpeg"
+  
+  # JPEG quality (1-100, only applies when image_format is "jpeg")
+  # Higher quality = larger file size, slower transmission
+  # Recommended: 85-95 for good balance of quality and speed
+  jpeg_quality: 90
 
