@@ -312,10 +312,11 @@ export default function Home() {
       <Navbar activeTab={activeTab} onTabChange={setActiveTab} apiHealth={apiHealth} />
 
       <motion.div
-        className="flex-1 relative overflow-hidden"
+        className="flex-1 relative overflow-hidden pt-0"
         initial="hidden"
         animate="visible"
         variants={containerVariants}
+        style={{ marginTop: 0 }}
       >
         {/* Rowan University themed background gradient */}
         <div className="fixed inset-0 -z-10">
@@ -381,7 +382,7 @@ export default function Home() {
         </motion.div>
 
         {/* 3-Column Pro Studio Layout */}
-        <div className="flex flex-col lg:flex-row h-[calc(100vh-3.5rem)] sm:h-[calc(100vh-4rem)] relative z-10">
+        <div className="flex flex-col lg:flex-row h-[calc(100vh-3.5rem-3rem)] sm:h-[calc(100vh-4rem-3rem)] md:h-[calc(100vh-4.5rem-3rem)] relative z-0">
           {/* Mobile Panel Toggle Buttons */}
           <div className="lg:hidden flex gap-2 p-2 border-b border-border/50 bg-background/40 backdrop-blur-sm">
             <Button
@@ -562,7 +563,7 @@ export default function Home() {
 
           {/* Center Panel - The Stage (Flexible) */}
           <motion.div
-            className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 overflow-y-auto min-h-0"
+            className="flex-1 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 space-y-4 sm:space-y-6 overflow-y-auto min-h-0 relative z-0"
             variants={itemVariants}
             initial="hidden"
             animate="visible"
@@ -586,7 +587,7 @@ export default function Home() {
                         initial="hidden"
                         animate="visible"
                         exit="hidden"
-                        className="relative w-full aspect-square bg-muted/30 rounded-lg sm:rounded-xl overflow-hidden group"
+                        className="relative w-full aspect-square bg-muted/30 rounded-lg sm:rounded-xl overflow-hidden group z-0"
                       >
                         <motion.img
                           src={currentImage.imageBase64}

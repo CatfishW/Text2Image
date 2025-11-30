@@ -41,6 +41,7 @@ export function Navbar({ activeTab, onTabChange, apiHealth }: NavbarProps) {
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
+      style={{ position: 'sticky' }}
     >
       <div className="container mx-auto px-2 sm:px-4 max-w-7xl">
         <div className="flex h-14 sm:h-16 md:h-18 items-center justify-center relative">
