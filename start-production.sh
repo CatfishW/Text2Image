@@ -142,17 +142,6 @@ echo -e "${BLUE}========================================${NC}"
 
 cd "$BACKEND_DIR" || exit 1
 
-# Check if virtual environment exists
-if [ ! -d "venv" ]; then
-    echo -e "${YELLOW}Creating Python virtual environment...${NC}"
-    python3 -m venv venv
-fi
-
-# Activate virtual environment
-echo -e "${YELLOW}Activating virtual environment...${NC}"
-source venv/bin/activate
-
-# Create .env file if it doesn't exist
 if [ ! -f ".env" ]; then
     echo -e "${YELLOW}Creating .env file with default configuration...${NC}"
     cat > .env << EOF
@@ -191,7 +180,10 @@ echo ""
 echo -e "${YELLOW}Starting Backend API Gateway...${NC}"
 cd "$BACKEND_DIR" || exit 1
 
-source venv/bin/activate
+# Activate virtual environment if it exists
+if [ -d "venv" ]; then
+    source venv/bin/activate
+fi
 
 # Set environment variables
 export NEXT_PUBLIC_API_URL="http://localhost:${BACKEND_PORT}"
