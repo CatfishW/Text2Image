@@ -85,7 +85,7 @@ model:
 # ============================================================================
 lora:
   # Enable LoRA loading
-  enabled: false
+  enabled: true
   
   # List of LoRAs to load
   # Each LoRA entry should have:

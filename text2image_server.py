@@ -31,6 +31,7 @@ import asyncio
 import base64
 import io
 import os
+import sys
 import time
 import uuid
 from collections import deque
@@ -491,16 +492,16 @@ def load_lora_weights(
         # Set the LoRA scale (strength)
         if adapter_name:
             pipeline.set_adapters([adapter_name], adapter_weights=[lora_strength])
-            print(f"  ✓ LoRA '{adapter_name}' loaded with strength {lora_strength}")
+            print(f"  [OK] LoRA '{adapter_name}' loaded with strength {lora_strength}")
         else:
             # For single LoRA without adapter name, use fuse_lora with scale
             pipeline.fuse_lora(lora_scale=lora_strength)
-            print(f"  ✓ LoRA loaded and fused with strength {lora_strength}")
+            print(f"  [OK] LoRA loaded and fused with strength {lora_strength}")
         
         return True
         
     except Exception as e:
-        print(f"  ✗ Failed to load LoRA from '{lora_path}': {e}")
+        print(f"  [ERROR] Failed to load LoRA from '{lora_path}': {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -527,7 +528,7 @@ def load_multiple_loras(pipeline, lora_configs: List[Dict]) -> int:
     for i, lora_config in enumerate(lora_configs):
         lora_path = lora_config.get("path")
         if not lora_path:
-            print(f"  ⚠ LoRA config {i} missing 'path', skipping")
+            print(f"  [WARNING] LoRA config {i} missing 'path', skipping")
             continue
         
         lora_strength = float(lora_config.get("strength", 0.8))
@@ -549,9 +550,9 @@ def load_multiple_loras(pipeline, lora_configs: List[Dict]) -> int:
     if len(adapter_names) > 1:
         try:
             pipeline.set_adapters(adapter_names, adapter_weights=adapter_weights)
-            print(f"  ✓ Set {len(adapter_names)} adapters with custom weights")
+            print(f"  [OK] Set {len(adapter_names)} adapters with custom weights")
         except Exception as e:
-            print(f"  ⚠ Could not set multi-adapter weights: {e}")
+            print(f"  [WARNING] Could not set multi-adapter weights: {e}")
     
     return loaded_count
 
@@ -786,11 +787,11 @@ async def lifespan(app: FastAPI):
             print(f"\nLoading {len(LORA_CONFIGS)} LoRA(s)...")
             loaded_loras = load_multiple_loras(pipe, LORA_CONFIGS)
             if loaded_loras > 0:
-                print(f"✓ Successfully loaded {loaded_loras}/{len(LORA_CONFIGS)} LoRA(s)")
+                print(f"[OK] Successfully loaded {loaded_loras}/{len(LORA_CONFIGS)} LoRA(s)")
             else:
-                print("⚠ No LoRAs were loaded successfully")
+                print("[WARNING] No LoRAs were loaded successfully")
         elif LORA_ENABLED:
-            print("\nℹ LoRA loading enabled but no LoRAs configured")
+            print("[INFO] LoRA loading enabled but no LoRAs configured")
         
         # Optional optimizations - Attention backend selection
         if ENABLE_FLASH_ATTENTION and ENABLE_ATTENTION_BACKEND_OPTIMIZATION:
