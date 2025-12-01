@@ -93,13 +93,13 @@ lora:
   #   - strength: LoRA strength/weight (0.0 to 2.0, default 0.8)
   #   - adapter_name: Optional name for the adapter (default: lora_0, lora_1, etc.)
   # Example:
-  # loras:
-  #   - path: "./loras/my_lora.safetensors"
-  #     strength: 0.8
+  loras:
+    - path: "./ztubro-lora-25000_zimage.safetensors"
+      strength: 0.79
   #   - path: "username/my-lora-repo"
   #     strength: 0.6
   #     adapter_name: "style_lora"
-  loras: []
+  # loras: []
 
 # ============================================================================
 # Storage Settings
